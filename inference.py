@@ -25,6 +25,12 @@ except ImportError:
 
 from support_env import SupportTicketEnvironment, SupportAction
 
+# Environment variables — defaults only for API_BASE_URL and MODEL_NAME, NOT HF_TOKEN
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+HF_TOKEN = os.getenv("HF_TOKEN")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+
 
 class InferenceAgent:
     """Agent that uses OpenAI to solve support tasks."""
@@ -151,10 +157,10 @@ def run_inference(
     Returns:
         result dict with metrics
     """
-    # Get env variables - MANDATORY from environment or defaults
-    api_base_url = api_base_url or os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-    model_name = model_name or os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
-    hf_token = hf_token or os.getenv("HF_TOKEN") or os.getenv("API_KEY") or ""
+    # Get env variables - use module-level constants
+    api_base_url = api_base_url or API_BASE_URL
+    model_name = model_name or MODEL_NAME
+    hf_token = hf_token or HF_TOKEN
     
     # Initialize environment
     env = SupportTicketEnvironment(seed=seed)
