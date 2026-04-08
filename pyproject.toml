@@ -29,10 +29,9 @@ dev = [
 
 [project.scripts]
 # Server entry point - enables running via: uv run --project . server
-# or: python -m pytorch_hackathon_env.server.app
-server = "pytorch_hackathon_env.server.app:main"
+server = "server.app:main"
 
 [tool.setuptools]
 include-package-data = true
-packages = ["pytorch_hackathon_env", "pytorch_hackathon_env.server"]
-package-dir = { "pytorch_hackathon_env" = ".", "pytorch_hackathon_env.server" = "server" }
+packages = ["server"]
+package-dir = { "server" = "server" }
