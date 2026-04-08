@@ -32,6 +32,24 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
 
+def log_start(task: str, env: str, model: str) -> None:
+    print(f"[START] task={task} env={env} model={model}", flush=True)
+
+
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
+    error_val = error if error else "null"
+    done_val = str(done).lower()
+    print(
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}",
+        flush=True,
+    )
+
+
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+
+
 class InferenceAgent:
     """Agent that uses OpenAI to solve support tasks."""
     
@@ -173,12 +191,12 @@ def run_inference(
         hf_token=hf_token,
     )
     
-    # Log start - MANDATORY format
+    # Log start
     task_names = {1: "billing_confused", 2: "technical_issue", 3: "complex_enterprise"}
     task_name = task_names.get(task_num, f"task_{task_num}")
     env_name = "support_ticket_environment"
-    print(f"[START] task={task_name} env={env_name} model={model_name}", flush=True)
-    
+    log_start(task=task_name, env=env_name, model=model_name)
+
     # Run episode
     step_count = 0
     total_reward = 0.0
@@ -186,11 +204,12 @@ def run_inference(
     done = False
     last_error: Optional[str] = None
     success = False
-    
+    score = 0.0
+
     try:
         while not done and step_count < max_steps:
             step_count += 1
-            
+
             # Get action from agent
             action_str, reasoning = agent.get_action(
                 customer_message=obs.customer_message,
@@ -200,52 +219,41 @@ def run_inference(
                 step_num=step_count,
                 max_steps=max_steps,
             )
-            
+
             # Create action object
             action = SupportAction(
                 action_type=action_str,
                 reasoning=reasoning
             )
-            
+
             # Step environment
             obs, reward, done, info = env.step(action)
-            
+
             total_reward += reward
             step_rewards.append(reward)
             last_error = None
-            
-            # Log step - MANDATORY format: error as "null" if none
-            error_str = "null" if last_error is None else last_error
-            print(
-                f"[STEP] step={step_count} action={action_str} reward={reward:.2f} "
-                f"done={str(done).lower()} error={error_str}",
-                flush=True
-            )
-        
+
+            log_step(step=step_count, action=action_str, reward=reward, done=done, error=last_error)
+
         # Get episode score and check success
         if hasattr(env, 'get_episode_score'):
             episode_reward, ep_details = env.get_episode_score()
             success = ep_details.get("issues_resolved", False)
         else:
             success = total_reward > 0.0
-        
+
+        # Normalize score to [0.0, 1.0]
+        score = min(max(total_reward, 0.0), 1.0)
+
     except Exception as e:
         last_error = str(e)
-        print(
-            f"[STEP] step={step_count} action=error reward=0.00 done=true error={last_error}",
-            flush=True
-        )
+        log_step(step=step_count, action="error", reward=0.0, done=True, error=last_error)
         success = False
-    
-    # Normalize score to [0.0, 1.0]
-    score = min(max(total_reward, 0.0), 1.0)
-    
-    # Log end - MANDATORY format: rewards as comma-separated with 2 decimals, score as 3 decimals
-    rewards_str = ",".join(f"{r:.2f}" for r in step_rewards)
-    print(
-        f"[END] success={str(success).lower()} steps={step_count} score={score:.3f} rewards={rewards_str}",
-        flush=True
-    )
+        score = min(max(total_reward, 0.0), 1.0)
+
+    finally:
+        # [END] always emitted, even on exception
+        log_end(success=success, steps=step_count, score=score, rewards=step_rewards)
     
     # Return metrics
     return {
