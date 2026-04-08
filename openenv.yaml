@@ -1,0 +1,175 @@
+# OpenEnv Configuration for Customer Support Environment
+# Compliant with OpenEnv specification for environment registration
+
+name: support_ticket_environment
+version: "1.0.0"  # REQUIRED: Semantic versioning
+title: Customer Support Ticket Environment
+description: Production-ready environment for customer support ticket resolution with multi-step reasoning, policy learning, and deterministic grading.
+
+# ============================================================================
+# OPENENV SPEC REQUIREMENTS
+# ============================================================================
+
+# Entrypoint specification (how the environment is accessed)
+entrypoint:
+  type: fastapi  # OpenEnv compatible async endpoint
+  module: server.app        # Python module path
+  app_name: app             # FastAPI app instance name
+  host: "0.0.0.0"
+  port: 8000
+  health_endpoint: /health  # Health check endpoint
+  environment_endpoint: /env  # Environment endpoint (POST to step/reset)
+
+# Observation schema (what agents receive from environment)
+observation:
+  type: object
+  description: Environment state observation containing ticket information and context
+  properties:
+    done:
+      type: boolean
+      description: Whether the episode has terminated
+    reward:
+      type: number
+      description: Reward signal from the last action
+    metadata:
+      type: object
+      description: Dynamic state (satisfaction_score, frustration, SLA hours)
+    ticket_id:
+      type: string
+      description: Unique ticket identifier
+    customer_message:
+      type: string
+      description: Customer's issue description
+    customer_tier:
+      type: string
+      enum: ["free", "pro", "enterprise"]
+      description: Customer account tier
+    priority:
+      type: string
+      enum: ["low", "medium", "high", "critical"]
+      description: Ticket priority level
+    category:
+      type: string
+      enum: ["billing", "technical", "account", "feature_request", "other"]
+      description: Issue category
+    sensor_data:
+      type: object
+      description: Business context (queue depth, KB match score, etc.)
+    current_status:
+      type: string
+      description: Current ticket status
+    reward_feedback:
+      type: string
+      description: Feedback on last action's reward
+    conversation_history:
+      type: array
+      description: List of interaction history
+    sla_deadline_hours:
+      type: integer
+      description: Hours remaining for SLA compliance
+    steps_taken:
+      type: integer
+      description: Number of actions taken so far
+    available_actions:
+      type: array
+      items:
+        type: string
+      description: Valid actions in current state
+
+# Action schema (what agents can do)
+action:
+  type: object
+  description: Agent action to take in the environment
+  properties:
+    action_type:
+      type: string
+      enum: [
+        "request_more_info",
+        "escalate_to_human",
+        "suggest_knowledge_base",
+        "assign_department",
+        "close_resolved",
+        "request_callback"
+      ]
+      description: Type of support workflow action
+    parameters:
+      type: object
+      description: Action parameters (e.g., department='billing')
+    reasoning:
+      type: string
+      description: Agent's reasoning for this action
+  required:
+    - action_type
+    - parameters
+    - reasoning
+
+# Task definitions for grading
+tasks:
+  - id: 1
+    name: billing_confused
+    difficulty: easy
+    description: Simple ticket classification and routing
+    grader: Task1_Grader
+    
+  - id: 2
+    name: technical_issue
+    difficulty: medium
+    description: Multi-step resolution with clarifications
+    grader: Task2_Grader
+    
+  - id: 3
+    name: complex_enterprise
+    difficulty: hard
+    description: Ambiguous issue requiring reasoning
+    grader: Task3_Grader
+
+# ============================================================================
+# DEPLOYMENT CONFIGURATION
+# ============================================================================
+
+# Deployment type: 'space' for HF Spaces, 'service' for cloud services
+type: space
+
+# Runtime specification
+runtime: fastapi
+
+# Docker configuration
+docker:
+  # Root-level Dockerfile uses full project as build context
+  dockerfile: Dockerfile
+  context: .
+  
+# Health check configuration
+health_check:
+  endpoint: /health
+  interval: 30
+  timeout: 10
+  retries: 3
+  initial_delay: 5
+
+# Maximum concurrent sessions for WebSocket support
+max_concurrent_sessions: 10
+
+# Enable web UI for testing
+enable_web_ui: true
+
+# Resource requirements for HF Spaces
+resources:
+  cpu: "2"
+  memory: "4Gi"
+  
+# Metadata for registry and documentation
+metadata:
+  author: "Meta PyTorch"
+  focus: "Customer Support"
+  tasks: 3
+  difficulty_levels: ["Easy", "Medium", "Hard"]
+  version: "1.0.0"
+  license: "BSD"
+  keywords:
+    - pytorch
+    - environment
+    - inference
+    - optimization
+    - reinforcement-learning
+
