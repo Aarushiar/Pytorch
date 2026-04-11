@@ -24,6 +24,7 @@ except ImportError:
     sys.exit(1)
 
 from support_env import SupportTicketEnvironment, SupportAction
+from tasks import Task1_Grader, Task2_Grader, Task3_Grader
 
 # Environment variables — defaults only for API_BASE_URL and MODEL_NAME, NOT HF_TOKEN
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
@@ -47,7 +48,7 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
 
 
 class InferenceAgent:
@@ -180,8 +181,9 @@ def run_inference(
     model_name = model_name or MODEL_NAME
     hf_token = hf_token or HF_TOKEN
     
-    # Initialize environment
-    env = SupportTicketEnvironment(seed=seed)
+    # Initialize environment with different seeds per task for varied scenarios
+    task_seed = seed + task_num
+    env = SupportTicketEnvironment(seed=task_seed)
     obs = env.reset()
     
     # Initialize agent
@@ -191,11 +193,9 @@ def run_inference(
         hf_token=hf_token,
     )
     
-    # Log start
-    task_names = {1: "billing_confused", 2: "technical_issue", 3: "complex_enterprise"}
-    task_name = task_names.get(task_num, f"task_{task_num}")
-    env_name = "support_ticket_environment"
-    log_start(task=task_name, env=env_name, model=model_name)
+    # Log start - use numeric task ID and per-task env name (MANDATORY format)
+    env_name = f"support_task_{task_num}_seed_{seed}"
+    log_start(task=str(task_num), env=env_name, model=model_name)
 
     # Run episode
     step_count = 0
@@ -235,21 +235,48 @@ def run_inference(
 
             log_step(step=step_count, action=action_str, reward=reward, done=done, error=last_error)
 
-        # Get episode score and check success
-        if hasattr(env, 'get_episode_score'):
-            episode_score = env.get_episode_score()
-            success = episode_score > 0.3
+        # Use actual graders from tasks.py to compute task score
+        graders = {1: Task1_Grader, 2: Task2_Grader, 3: Task3_Grader}
+        grader = graders.get(task_num)
+        if grader and env.current_state:
+            last_action = env.current_state.actions_taken[-1] if env.current_state.actions_taken else "request_more_info"
+            last_reasoning = ""
+            for entry in reversed(env.current_state.conversation_history):
+                if entry.get("actor") == "agent":
+                    last_reasoning = entry.get("reasoning", "")
+                    break
+            ticket_context = {
+                "customer_tier": env.current_state.customer_tier,
+                "category": env.current_state.category,
+                "priority": env.current_state.priority,
+                "customer_history": getattr(obs, "customer_history", {}),
+            }
+            try:
+                if task_num == 3:
+                    grader_score, _ = grader.grade(
+                        action_taken=last_action,
+                        reasoning=last_reasoning,
+                        parameters={},
+                        ticket_context=ticket_context,
+                    )
+                else:
+                    grader_score, _ = grader.grade(
+                        action_taken=last_action,
+                        reasoning=last_reasoning,
+                        ticket_context=ticket_context,
+                    )
+                score = max(0.01, min(0.99, grader_score))
+            except Exception:
+                score = max(0.01, min(0.99, total_reward / max(step_count, 1)))
         else:
-            success = total_reward > 0.0
-
-        # Normalize score to (0.01, 0.99) - strictly between 0 and 1 per validator
-        score = max(0.01, min(0.99, total_reward))
+            score = max(0.01, min(0.99, total_reward / max(step_count, 1)))
+        success = score > 0.3
 
     except Exception as e:
         last_error = str(e)
         log_step(step=step_count, action="error", reward=0.0, done=True, error=last_error)
         success = False
-        score = max(0.01, min(0.99, total_reward))
+        score = max(0.01, min(0.99, total_reward / max(step_count, 1)))
 
     finally:
         # [END] always emitted, even on exception
