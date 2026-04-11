@@ -149,8 +149,8 @@ class Task1_Grader:
             - breakdown["penalties"]                # Penalize mistakes
         )
 
-        # Clamp to [0, 1]
-        final_score = max(0.0, min(1.0, breakdown["final_score"]))
+        # Clamp to (0.01, 0.99) - strictly between 0 and 1 per validator requirement
+        final_score = max(0.01, min(0.99, breakdown["final_score"]))
         breakdown["final_score"] = final_score
 
         return final_score, breakdown
@@ -284,8 +284,8 @@ class Task2_Grader:
             - breakdown["penalties"]                    # Penalize mistakes
         )
 
-        # Clamp to [0, 1]
-        final_score = max(0.0, min(1.0, breakdown["final_score"]))
+        # Clamp to (0.01, 0.99) - strictly between 0 and 1 per validator requirement
+        final_score = max(0.01, min(0.99, breakdown["final_score"]))
         breakdown["final_score"] = final_score
 
         return final_score, breakdown
@@ -569,8 +569,8 @@ class Task3_Grader:
             - breakdown["penalties"]                       # Penalize mistakes
         )
 
-        # Clamp to [0, 1]
-        final_score = max(0.0, min(1.0, breakdown["final_score"]))
+        # Clamp to (0.01, 0.99) - strictly between 0 and 1 per validator requirement
+        final_score = max(0.01, min(0.99, breakdown["final_score"]))
         breakdown["final_score"] = final_score
 
         return final_score, breakdown
