@@ -227,7 +227,7 @@ def run_inference(
             )
 
             # Step environment
-            obs, reward, done, info = env.step(action)
+            obs, reward, done = env.step(action)
 
             total_reward += reward
             step_rewards.append(reward)
@@ -237,19 +237,19 @@ def run_inference(
 
         # Get episode score and check success
         if hasattr(env, 'get_episode_score'):
-            episode_reward, ep_details = env.get_episode_score()
-            success = ep_details.get("issues_resolved", False)
+            episode_score = env.get_episode_score()
+            success = episode_score > 0.3
         else:
             success = total_reward > 0.0
 
-        # Normalize score to [0.0, 1.0]
-        score = min(max(total_reward, 0.0), 1.0)
+        # Normalize score to (0.01, 0.99) - strictly between 0 and 1 per validator
+        score = max(0.01, min(0.99, total_reward))
 
     except Exception as e:
         last_error = str(e)
         log_step(step=step_count, action="error", reward=0.0, done=True, error=last_error)
         success = False
-        score = min(max(total_reward, 0.0), 1.0)
+        score = max(0.01, min(0.99, total_reward))
 
     finally:
         # [END] always emitted, even on exception
@@ -312,15 +312,16 @@ def main():
     
     args = parser.parse_args()
     
-    # Run single inference
-    run_inference(
-        task_num=args.task,
-        seed=args.seed,
-        max_steps=args.max_steps,
-        api_base_url=args.api_base_url,
-        model_name=args.model_name,
-        hf_token=args.hf_token,
-    )
+    # Run all 3 tasks (validator requires at least 3 tasks with graders)
+    for task_num in [1, 2, 3]:
+        run_inference(
+            task_num=task_num,
+            seed=args.seed,
+            max_steps=args.max_steps,
+            api_base_url=args.api_base_url,
+            model_name=args.model_name,
+            hf_token=args.hf_token,
+        )
 
 
 if __name__ == "__main__":
